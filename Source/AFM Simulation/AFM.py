@@ -1,118 +1,82 @@
-#Tilt the tip, be able to turn image on or off.
-
 #Included modules
 from __future__ import division
 from visual.controls import *
 from PIL import Image
-import math
-import os
+import math, os
 
 #Define constants
-default_width = 800
-default_height = 600
-default_forward = vector(0.597258, -0.712878, 0.367541)
+defaultSceneWidth = 800
+defaultSceneHeight = 600
+defaultSceneForward = vector(0.9,-0.5,0)
 speed = 30
-step_size = .1
-
-raised_height = 2
+stepSize = 0.1
+raisedHeight = 2
 
 #Initialize useful variables
-image_height = 30
-image_width = 30
-x_offset = 0
-y_offset = 0
+imageHeight = 40
+imageWidth = 40
 
 #Window settings
-scene.title = 'AFM Visualization'
+scene.title = "AFM Visualization"
 scene.background = color.white
 scene.foreground = color.black
-scene.width=default_width
-scene.height=default_height
-scene.forward=default_forward
-scene.autoscale = False
-scene.lights = [distant_light(direction=(0.22, 0.44, 0.88), color=color.gray(0.8)), distant_light(direction=(-0.88, -0.22, -0.44), color=color.gray(0.3)), distant_light(direction=(0, 1, 0), color=color.gray(0.3))]
+scene.width = defaultSceneWidth
+scene.height = defaultSceneHeight
+scene.forward = defaultSceneForward
+scene.lights = [distant_light(direction=(0.22,0.44,0.88), color=color.gray(0.8)), distant_light(direction=(-0.88,-0.22,-0.44), color=color.gray(0.3)), distant_light(direction=(0,1,0), color=color.gray(0.3))]
+
+#Paths to resources
+settingsPath = "C:\\AFM\\settings.ini"
+comPath = "C:\\AFM\\00.tmp"
+imagePath = "C:\\AFM\\surfacepic.jpg"
 
 #Define trace-line and add-point function
-all_lines = []
-def addpoint(x,y):
-    all_lines[len(all_lines)-1].append(pos = (-y,0,x))
+allLines = []
+def addPoint(x,y):
+    allLines[-1].append(pos = (-y,0,x))
 
-#Define surface
-surface = box(color = color.yellow, size = (70, 1.5, 70))
-surface.y = -surface.height/2
-
-#Read initial settings
+#Read image settings
 try:
-    read_stream = open('C:\\AFM\\settings.ini', 'r')
-except Exception:
-    pass
-try:
-    image_height = float(read_stream.readline())
-except Exception:
-    pass
-try:
-    image_width = float(read_stream.readline())
-except Exception:
-    pass
-try:
-    x_offset = float(read_stream.readline())
-except Exception:
-    pass
-try:
-    y_offset = float(read_stream.readline())
-except Exception:
-    pass
-try:
-    read_stream.close()
+    readStream = open(settingsPath, "r")
+    projected.height = float(readStream.readline())
+    projected.width = float(readStream.readline())
+    readStream.close()
 except Exception:
     pass
 
 #Define image projected on surface
 try:
-    im = Image.open('C:\\AFM\\surfacepic.jpg')
+    image = Image.open(imagePath)
 except Exception:
     pass
 try:
-    im = Image.open('C:\\AFM\\surfacepic.jpeg')
+    image = Image.open(imagePath)
 except Exception:
     pass
-im = im.resize((512,512), Image.ANTIALIAS)
-texture = materials.texture(data=im, mapping='sign')
-projected_image = box(axis = (0,1,0), length = .005, width = image_width, height = image_height, material=texture)
+try:
+    image = image.resize((512,512), Image.ANTIALIAS)
+    image = image.rotate(90, expand=0)
+    texture = materials.texture(data=image, mapping="sign")
+    projectedImage = box(axis=(0,1,0), length=0.005, width=imageWidth, height=imageHeight, material=texture)
+except Exception:
+    pass
+
+#Define surface
+surface = box(color=color.gray(0.4), size=(imageWidth, 1.5, imageHeight))
+surface.y = -surface.height/2
 
 #Define AFM tip components
 AFM = frame()
-point = cone(frame = AFM, y = raised_height, axis=(0,-2,0), radius = 1, color = color.cyan)
-color_rgb = (242/255,170/255,200/255)
-handle = box(frame = AFM, color = color_rgb, pos = (0,point.y,point.z), length = 15, height = .75, width = 2.5*point.radius)
-handle_original_x = handle.length/2 - 1.25*point.radius
-handle.x = handle_original_x
+point = cone(frame=AFM, y=raisedHeight, axis=(0, -2, 0), radius=1, color=color.black)
+handleShape = Polygon([(1.25*point.radius, 1.25*point.radius), (5*point.radius, -12.5), (2.5*point.radius, -12.5), (0,-1.25), (-2.5*point.radius, -12.5), (-5*point.radius, -12.5), (-1.25*point.radius, 1.25*point.radius)])
+handle = extrusion(frame=AFM, shape=handleShape, pos=[(0, raisedHeight+0.25, 0),(0, raisedHeight-0.5, 0)], color=color.gray(0.6))
 
-#Define movement and interpretation functions (x is away along side of afm box, y is along side of surface)
-def jumptopos(x,y,trace):
-    x+=x_offset
-    y+=y_offset
-    handle.z = x
-    point.z = x
-    point.x = -y
-    handle.x = -y + handle_original_x
+#Define movement and interpretation functions
+def jumpToPos(x, y, trace):
+    AFM.z = x
+    AFM.x = -y
     if trace:
-        addpoint(x,y)        
-    
-def movetopos(x,y):
-    begin_x = -point.z
-    begin_y = -point.x
-    distance = sqrt((y-begin_y)**2 + (x-begin_x)**2)
-    if (x - begin_x) != 0:
-        angle = atan2(y-begin_y,x-begin_x)
-    elif (y-begin_y) > 0:
-        angle = pi/2
-    else:
-        angle = -pi/2
-    for i in range(int(distance/step_size)):
-        jumptopos(begin_x+i*step_size*cos(angle), begin_y+i*step_size*sin(angle))
-        rate(speed)
-    jumptopos(x,y)
+        addPoint(x,y)
 
 def draw(voltage):
     if voltage > 3:
@@ -124,91 +88,57 @@ def draw(voltage):
 
 #Define variables before loop
 color = color.black
-line_width = 0.01
+lineWidth = 0.01
 x = 0
 y = 0
 voltage = 0
-oldx = 0.
-oldy = 0.
-oldcolor = (0,0,0)
-oldvoltage = 0.
-oldline_width = 0.
-oldcenter = (0,0,0)
-oldvisible = True
+oldX = 0.0
+oldY = 0.0
+oldColor = (0,0,0)
+oldVoltage = 0.0
+oldLineWidth = 0.0
+oldCenter = (0,0,0)
+oldVisible = True
 first = True
 
 #Reset file before loop
-write_stream = open('C:\\AFM\\00.tmp', 'w')
-write_stream.write("0\n0\n0\n(0,0,0)\n(0,0,0)\n1\n10")
-write_stream.close()
+writeStream = open(comPath, "w")
+writeStream.write("0\n0\n0\n(0,0,0)\n(0,0,0)\n1\n0")
+writeStream.close()
 
 #Actions
 while True:
     #Adjust rate of program
     rate(speed)
 
-    #Read data from command.tmp
-    fail = False
-    try:
-        command_stream = open('C:\\AFM\\command.tmp', 'r')
-    except Exception:
-        fail = True
-    if not fail:
-        try:
-            exec(command_stream.read())
-        except Exception:
-            fail = True
-        command_stream.close()
-        try:
-            os.remove('C:\\AFM\\command.tmp')
-        except Exception:
-            pass
-
     #Read data from data stream (if ready) and interpret
-    read_stream = open('C:\\AFM\\00.tmp', 'r')
+    readStream = open(comPath, "r")
     try:
-        x = float(read_stream.readline())
-    except ValueError:
-        pass
-    try:
-        y = float(read_stream.readline())
-    except ValueError:
-        pass
-    try:
-        exec("color = " + read_stream.readline())
-    except Exception:
-        color = oldcolor
-    try:
-        line_width = float(read_stream.readline())
-    except ValueError:
-        pass
-    try:
-        exec("scene.center = " + read_stream.readline())
+        x = float(readStream.readline())
+        y = float(readStream.readline())
+        color =  eval(readStream.readline())
+        lineWidth = float(readStream.readline())
+        scene.center = eval(readStream.readline())
+        AFM.visible = int(readStream.readline())
+        voltage = float(readStream.readline())
     except Exception:
         pass
-    try:
-        AFM.visible = int(read_stream.readline())
-    except ValueError:
-        AFM.visible = oldvisible
-    try:
-        voltage = float(read_stream.readline())
-    except ValueError:
-        pass
-        
-    if (x != oldx) or (y != oldy) or (color != oldcolor) or (line_width != oldline_width):
-        if (color != oldcolor) or (line_width != oldline_width) or (len(all_lines[len(all_lines)-1].pos) >= 950):
-            all_lines.append(curve(radius = line_width))
+
+    #Add point    
+    if (x != oldX) or (y != oldY) or (color != oldColor) or (lineWidth != oldLineWidth):
+        if (color != oldColor) or (lineWidth != oldLineWidth) or (len(allLines[-1].pos) >= 950):
+            allLines.append(curve(radius=lineWidth))
             try:
-                all_lines[len(all_lines)-1].color = color
+                allLines[-1].color = color
                 point.color = color
             except Exception:
                 pass
-        jumptopos(x,y, draw(voltage) * (not first))
-        oldx = x
-        oldy = y
-        oldcolor = color
-        oldline_width = line_width
-        oldvoltage = voltage
+        jumpToPos(x, y, draw(voltage)*(not first))
+        oldX = x
+        oldY = y
+        oldColor = color
+        oldLineWidth = lineWidth
+        oldVoltage = voltage
     if first:
         first = False
-    read_stream.close()
+    readStream.close()
